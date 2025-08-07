@@ -18,7 +18,12 @@ import Spinner from 'react-native-loading-spinner-overlay';
 import { AuthContext } from '../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Fontisto from '@expo/vector-icons/Fontisto';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import ImageViewer from 'react-native-image-zoom-viewer';
+import moment from 'moment';
+import 'moment/locale/ru';
+moment.locale('ru');
+import { MotiView, AnimatePresence } from 'moti';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -36,10 +41,20 @@ export default function MainScreen({navigation}) {
   const [expandedDescriptions, setExpandedDescriptions] = useState({});
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [currentImages, setCurrentImages] = useState([]);
+  const [likedTracks, setLikedTracks] = useState({});
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const baseImageURL = BASE_URL.replace('/api', '');
   const pageRef = useRef(1);
   const allLoadedRef = useRef(false);
   const loadingRef = useRef(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+
+  // Форматирование даты в относительный формат
+  const formatDate = (dateString) => {
+    return moment(dateString, 'DD-MM-YYYY HH:mm').fromNow();
+  };
 
   // Загрузка профиля пользователя
   const getProfile = async () => {
@@ -63,6 +78,36 @@ export default function MainScreen({navigation}) {
     }
   };
 
+  // // Переключение лайка
+  // const toggleLike = async (trackId) => {
+  //   try {
+  //     const newLikedState = !likedTracks[trackId];
+  //     setLikedTracks(prev => ({...prev, [trackId]: newLikedState}));
+      
+  //     // Обновляем локальное состояние треков
+  //     setTracks(prev => prev.map(track => {
+  //       if (track.id === trackId) {
+  //         return {
+  //           ...track,
+  //           total_likes: newLikedState ? track.total_likes + 1 : track.total_likes - 1
+  //         };
+  //       }
+  //       return track;
+  //     }));
+
+  //     // Отправляем запрос на сервер
+  //     if (newLikedState) {
+  //       await api.post(`${BASE_URL}/tracks/${trackId}/like/`);
+  //     } else {
+  //       await api.post(`${BASE_URL}/tracks/${trackId}/like/`);
+  //     }
+  //   } catch (e) {
+  //     console.log('Ошибка при лайке:', e);
+  //     // Откатываем изменения в случае ошибки
+  //     setLikedTracks(prev => ({...prev, [trackId]: !prev[trackId]}));
+  //   }
+  // };
+
   // Переключение отображения полного описания
   const toggleDescription = (trackId) => {
     setExpandedDescriptions(prev => ({
@@ -70,7 +115,10 @@ export default function MainScreen({navigation}) {
       [trackId]: !prev[trackId]
     }));
   };
-
+  const toggleSearch = () => {
+    setSearchOpen(prev => !prev);
+    if (searchOpen) setSearchText('');
+  };
   // Открытие изображения в полноэкранном режиме
   const openImage = (images, index) => {
     const formattedImages = images.map(img => ({
@@ -78,6 +126,7 @@ export default function MainScreen({navigation}) {
       props: {}
     }));
     setCurrentImages(formattedImages);
+    setCurrentImageIndex(index);
     setImageViewerVisible(true);
   };
 
@@ -160,18 +209,43 @@ export default function MainScreen({navigation}) {
   };
 
   const renderTrackItem = ({item}) => (
-    <View style={styles.trackCard}>
-      <View style={{flexDirection: 'row', alignItems: 'center'}}>
-        <TouchableOpacity onPress={() => loadCreatorInfo(item.creator)}>
-          <Image 
-            source={{ uri: `${baseImageURL}${item.creator_avatar}`}} 
-            style={styles.creatorAvatar}
-          />
-        </TouchableOpacity>
-        <Text style={styles.creatorName}>{item.creator}</Text>
+    <View style={[
+      styles.trackCard,
+      item.completed && styles.completedTrack
+    ]}>
+      <View style={styles.trackHeader}>
+        <View style={{flexDirection: 'row', alignItems: 'center'}}>
+          <TouchableOpacity onPress={() => loadCreatorInfo(item.creator)}>
+            <Image 
+              source={{ uri: `${baseImageURL}${item.creator_avatar}`}} 
+              style={styles.creatorAvatar}
+            />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.creatorName}>{item.creator}</Text>
+            <Text style={styles.trackDate}>{formatDate(item.created_at)}</Text>
+          </View>
+        </View>
+        
+        {item.completed && (
+          <View style={styles.solvedBadge}>
+            <Text style={styles.solvedText}>Решено</Text>
+          </View>
+        )}
       </View>
       
       <Text style={styles.trackTitle}>{item.subject}</Text>
+      
+      {/* Категории */}
+      {item.category?.length > 0 && (
+        <View style={styles.categoriesContainer}>
+          {item.category.map((category, index) => (
+            <View key={`${item.id}-${index}`} style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{category}</Text>
+            </View>
+          ))}
+        </View>
+      )}
       
       <Text 
         style={styles.trackDescription}
@@ -209,6 +283,25 @@ export default function MainScreen({navigation}) {
           showsHorizontalScrollIndicator={false}
         />
       )}
+      
+      {/* Лайки и просмотры */}
+      <View style={styles.statsContainer}>
+        <View
+          style={styles.likeButton}
+        >
+          <Ionicons 
+            name={likedTracks[item.id] ? "heart" : "heart-outline"} 
+            size={20} 
+            color={likedTracks[item.id] ? "#ff4747" : "#424242"} 
+          />
+          <Text style={styles.statText}>{item.total_likes || 0}</Text>
+        </View>
+        
+        <View style={styles.viewStat}>
+          <Ionicons name="eye-outline" size={20} color="#424242" />
+          <Text style={styles.statText}>{item.views || 0}</Text>
+        </View>
+      </View>
     </View>
   );
 
@@ -306,7 +399,7 @@ export default function MainScreen({navigation}) {
         <Modal visible={imageViewerVisible} transparent={true}>
           <ImageViewer 
             imageUrls={currentImages}
-            index={0}
+            index={currentImageIndex}
             enableSwipeDown
             onSwipeDown={() => setImageViewerVisible(false)}
             onClick={() => setImageViewerVisible(false)}
@@ -315,18 +408,52 @@ export default function MainScreen({navigation}) {
           />
         </Modal>
 
+
         {/* Нижнее меню */}
-        <View style={styles.bottomMenu}>
-          <TouchableOpacity style={styles.menuButton}>
-            <Image source={require('../images/search.png')} style={styles.menuIcon}/>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuButton}>
-            <Image source={require('../images/add.png')} style={styles.menuIcon}/>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuButton}>
-            <Image source={require('../images/home.png')} style={styles.menuIcon}/>
-          </TouchableOpacity>
-        </View>
+    <>
+      <AnimatePresence>
+        {searchOpen && (
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            exit={{ opacity: 0, translateY: 20 }}
+            transition={{ type: 'timing', duration: 300 }}
+            style={styles.searchBarContainer}
+          >
+            <TextInput
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Поиск..."
+              style={styles.searchInput}
+              autoFocus
+            />
+          </MotiView>
+        )}
+      </AnimatePresence>
+
+      <View style={styles.bottomMenu}>
+        <TouchableOpacity style={styles.menuButton} onPress={toggleSearch}>
+          <Image
+            source={
+              searchOpen
+                ? require('../images/close.png') // ← крестик
+                : require('../images/search.png') // ← лупа
+            }
+            style={styles.menuIcon}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuButton}>
+          <Image source={require('../images/add.png')} style={styles.menuIcon} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuButton}>
+          <Image source={require('../images/home.png')} style={styles.menuIcon} />
+        </TouchableOpacity>
+      </View>
+    </>
+
+
       </View>
       <StatusBar style="auto" />
     </SafeAreaView> 
@@ -407,6 +534,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#C8E6C9',
   },
+  completedTrack: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#4CAF50',
+  },
+  trackHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
   creatorAvatar: {
     width: 40,
     height: 40,
@@ -420,11 +557,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2E7D32',
   },
+  trackDate: {
+    fontSize: 12,
+    color: '#757575',
+  },
+  solvedBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  solvedText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   trackTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginTop: 10,
+    marginTop: 5,
     color: '#1B5E20',
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    marginBottom: 5,
+  },
+  categoryBadge: {
+    backgroundColor: '#BBDEFB',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  categoryText: {
+    color: '#0D47A1',
+    fontSize: 12,
   },
   trackDescription: {
     fontSize: 14,
@@ -450,6 +620,25 @@ const styles = StyleSheet.create({
     marginRight: 10,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  viewStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statText: {
+    marginLeft: 5,
+    color: '#424242',
+    fontSize: 14,
   },
   endOfList: {
     textAlign: 'center',
@@ -479,6 +668,25 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 30,
     height: 30,
+  },
+  searchBarContainer: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: 90,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  searchInput: {
+    fontSize: 16,
+    color: '#000',
   },
   // Стили для модального окна создателя
   centeredView: {
