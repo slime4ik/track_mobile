@@ -295,12 +295,13 @@ export default function MainScreen({navigation}) {
         <ImageView
           images={tracks.flatMap(track => 
             track.images?.map(image => ({ uri: `${baseImageURL}${image.image}` })) || []
-          }
+          )}
           imageIndex={currentImageIndex}
           visible={imageViewerVisible}
           onRequestClose={() => setImageViewerVisible(false)}
           animationType="fade"
         />
+
 
         {/* Нижнее меню */}
         <View style={styles.bottomMenu}>
