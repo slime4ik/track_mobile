@@ -1,85 +1,135 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, FlatList, ActivityIndicator } from 'react-native';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  Image, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  FlatList, 
+  Modal, 
+  Pressable,
+  Dimensions
+} from 'react-native';
 import api from "../api";
 import { BASE_URL } from '../config';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import Spinner from 'react-native-loading-spinner-overlay';
 import { AuthContext } from '../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Fontisto from '@expo/vector-icons/Fontisto';
+import ImageView from 'react-native-image-viewing';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function MainScreen({navigation}) {
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState(null);
-  const [creatorInfo, setCreatorInfo] = useState(null)
-  // const [userTracks, setTracks] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { logout } = useContext(AuthContext);
-  const [isCreatorDetail, setIsCreatorDetail] = useState(null)
-  const baseImageURL = BASE_URL.replace('/api', '')
+  const [creatorModalVisible, setCreatorModalVisible] = useState(false);
+  const [currentCreator, setCurrentCreator] = useState(null);
+  const [creatorInfo, setCreatorInfo] = useState(null);
+  const [expandedDescriptions, setExpandedDescriptions] = useState({});
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const baseImageURL = BASE_URL.replace('/api', '');
+  const pageRef = useRef(1);
+  const allLoadedRef = useRef(false);
 
+  // Загрузка профиля пользователя
   const getProfile = async () => {
-    setLoading(true);
     try {
       const res = await api.get(`${BASE_URL}/me/`);
       setUserInfo(res.data);
     } catch (e) {
       console.log('Ошибка получения профиля', e);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const getCreatorProfile = (username) => {
+  // Загрузка информации о создателе
+  const loadCreatorInfo = async (username) => {
     try {
-      setIsCreatorDetail(`${username}`)
-      console.log(isCreatorDetail)
-      if (isCreatorDetail === username) {
-      const url = (`${BASE_URL}/users/${username}/`)
-      console.log(`${url}`)
-      const res = api.get(`${BASE_URL}/users/${username}/`)
-      setCreatorInfo(res.data)
-      console.log(creatorInfo)
+      const res = await api.get(`${BASE_URL}/users/${username}/`);
+      setCreatorInfo(res.data);
+      setCurrentCreator(username);
+      setCreatorModalVisible(true);
+    } catch (e) {
+      console.log('Ошибка получения профиля создателя', e);
+    }
+  };
+
+  // Переключение отображения полного описания
+  const toggleDescription = (trackId) => {
+    setExpandedDescriptions(prev => ({
+      ...prev,
+      [trackId]: !prev[trackId]
+    }));
+  };
+
+  // Открытие изображения в полноэкранном режиме
+  const openImage = (index) => {
+    setCurrentImageIndex(index);
+    setImageViewerVisible(true);
+  };
+
+  // Загрузка треков с пагинацией
+  const loadTracks = useCallback(async (refresh = false) => {
+    if (isLoadingMore || (allLoadedRef.current && !refresh)) return;
+    
+    if (refresh) {
+      setRefreshing(true);
+      setHasMore(true);
+      allLoadedRef.current = false;
+      pageRef.current = 1;
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    try {
+      const res = await api.get(`${BASE_URL}/tracks/?page=${pageRef.current}`);
+      
+      if (refresh) {
+        setTracks(res.data.results);
+      } else {
+        // Фильтрация дубликатов по ID
+        const newTracks = res.data.results.filter(
+          newTrack => !tracks.some(existingTrack => existingTrack.id === newTrack.id)
+        );
+        setTracks(prev => [...prev, ...newTracks]);
+      }
+      
+      // Проверяем, есть ли следующая страница
+      const hasMorePages = !!res.data.next;
+      setHasMore(hasMorePages);
+      
+      if (!hasMorePages) {
+        allLoadedRef.current = true;
+      } else {
+        pageRef.current += 1;
       }
     } catch (e) {
-      console.log('Произошла обибка получения профиля создателя трека', e);
-    } finally{
-
+      console.log('Ошибка загрузки треков:', e);
+    } finally {
+      if (refresh) {
+        setRefreshing(false);
+      } else {
+        setIsLoadingMore(false);
+      }
     }
-  }
+  }, [tracks, isLoadingMore]);
 
-const loadTracks = async (refresh = false) => {
-  if (refresh) {
-    setHasMore(true);
-    setIsLoadingMore(false);
-  }
-
-  if (isLoadingMore || !hasMore) return;
-
-  setIsLoadingMore(true);
-  
-  try {
-    const url = refresh 
-      ? `${BASE_URL}/tracks/` 
-      : `${BASE_URL}/tracks/?page=${Math.floor(tracks.length / 5) + 1}`;
-    
-    const res = await api.get(url);
-    
-    setTracks(prev => refresh ? res.data.results : [...prev, ...res.data.results]);
-    setHasMore(!!res.data.next);
-  } catch (e) {
-    console.log('Ошибка загрузки треков:', e);
-  } finally {
-    setIsLoadingMore(false);
-    console.log(baseImageURL)
-  }
-};
-
+  // Инициализация данных
   useEffect(() => {
-    getProfile();
-    loadTracks(true); // Первоначальная загрузка
+    const initialize = async () => {
+      await getProfile();
+      await loadTracks(true);
+      setLoading(false);
+    };
+    initialize();
   }, []);
 
   const handleLogout = async () => {
@@ -98,40 +148,78 @@ const loadTracks = async (refresh = false) => {
     navigation.navigate('Profile');
   };
 
-  if (loading) {
+  const renderTrackItem = ({item}) => (
+    <View style={styles.trackCard}>
+      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+        <TouchableOpacity onPress={() => loadCreatorInfo(item.creator)}>
+          <Image 
+            source={{ uri: `${baseImageURL}${item.creator_avatar}`}} 
+            style={styles.creatorAvatar}
+          />
+        </TouchableOpacity>
+        <Text style={styles.creatorName}>{item.creator}</Text>
+      </View>
+      
+      <Text style={styles.trackTitle}>{item.subject}</Text>
+      
+      <Text 
+        style={styles.trackDescription}
+        numberOfLines={expandedDescriptions[item.id] ? undefined : 3}
+      >
+        {item.description}
+      </Text>
+      
+      {item.description?.length > 100 && (
+        <TouchableOpacity 
+          onPress={() => toggleDescription(item.id)}
+          style={styles.showMoreButton}
+        >
+          <Text style={styles.showMoreText}>
+            {expandedDescriptions[item.id] ? 'Свернуть' : 'Показать больше...'}
+          </Text>
+        </TouchableOpacity>
+      )}
+      
+      {/* Галерея изображений */}
+      {item.images?.length > 0 && (
+        <FlatList
+          horizontal
+          data={item.images}
+          keyExtractor={(img, index) => `img-${item.id}-${index}`}
+          renderItem={({item: image, index}) => (
+            <TouchableOpacity onPress={() => openImage(index)}>
+              <Image 
+                source={{ uri: `${baseImageURL}${image.thumbnail || image.image}`}} 
+                style={styles.trackImage}
+              />
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.imagesContainer}
+          showsHorizontalScrollIndicator={false}
+        />
+      )}
+    </View>
+  );
+
+  if (loading && !userInfo) {
     return (
       <View style={styles.container}>
         <Spinner visible={true} />
       </View>
     );
   }
-const TrackCard = ({ track }) => (
-  <View style={styles.trackCard}>
-    {isCreatorDetail === `${track.username}` && (
-      <View style={styles.CreatorCatd}>
-        
-      </View>
-    )} 
-    
-    <View style={{flexDirection: 'row'}}>
-      <TouchableOpacity onPress={() => getCreatorProfile(track.creator)}>
-      <Image source={{ uri: `${baseImageURL}${track.creator_avatar}`}} style={styles.creatoravatar}/>
-      </TouchableOpacity>
-      <Text style={{alignSelf: 'center'}}>{track.creator}</Text>
-    </View>
-    <Text style={styles.trackTitle}>{track.subject}</Text>
-    <Text style={styles.trackDescription}>{track.description}</Text>
-    {/* Доп. элементы (лайки, категории и т.д.) */}
-  </View>
-)
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={styles.container}>
-        {/* Верхняя панель с аватаром (без изменений) */}
+        {/* Шапка */}
         <View style={styles.topBar}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Выйти</Text>
+          </TouchableOpacity>
           <View style={styles.rightIcons}>
             <TouchableOpacity onPress={handleProfilePress}>
-              <Image source={{ uri: userInfo.avatar }} style={styles.avatar} />
+              <Image source={{ uri: userInfo?.avatar }} style={styles.avatar} />
             </TouchableOpacity>
             <View style={styles.favContainer}>
               <Fontisto name="favorite" size={24} color="black" />
@@ -139,38 +227,82 @@ const TrackCard = ({ track }) => (
           </View>
         </View>
 
-        {/* Заменяем ScrollView на FlatList */}
+        {/* Список треков */}
         <View style={styles.contentWrapper}>
-<FlatList
-  data={tracks}
-  renderItem={({item}) => (
-    <>
-      <TrackCard 
-        track={item} 
-        onPress={() => navigation.navigate('TrackDetail', { track: item })}
-      />
-      {/* <View style={styles.trackSeparator}/> */}
-    </>
-  )}
-  keyExtractor={item => item.id}
-  style={styles.scrollContainer}
-  contentContainerStyle={styles.scrollContent}
-  showsVerticalScrollIndicator={false}
-  onEndReached={() => loadTracks()}
-  onEndReachedThreshold={0.5}
-  refreshing={isLoadingMore}
-  onRefresh={() => loadTracks(true)}
-  ListFooterComponent={
-    isLoadingMore && <ActivityIndicator style={{padding: 10}}/>
-  }
-/>
+          <FlatList
+            data={tracks}
+            renderItem={renderTrackItem}
+            keyExtractor={item => `track-${item.id}`}
+            style={styles.scrollContainer}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            onEndReached={() => loadTracks()}
+            onEndReachedThreshold={0.1}
+            refreshing={refreshing}
+            onRefresh={() => loadTracks(true)}
+            ListFooterComponent={
+              isLoadingMore ? (
+                <ActivityIndicator style={{padding: 10}}/>
+              ) : !hasMore ? (
+                <Text style={styles.endOfList}>Все треки загружены</Text>
+              ) : null
+            }
+          />
         </View>
 
-        {/* Остальной код (кнопка выхода и нижнее меню) без изменений */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Выйти</Text>
-        </TouchableOpacity>
+        {/* Модальное окно создателя */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={creatorModalVisible}
+          onRequestClose={() => setCreatorModalVisible(false)}
+        >
+          <View style={styles.centeredView}>
+            <View style={styles.creatorModalView}>
+              <Pressable
+                style={styles.closeButton}
+                onPress={() => setCreatorModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </Pressable>
+              
+              {creatorInfo && (
+                <>
+                  <Image 
+                    source={{ uri: `${baseImageURL}${creatorInfo.avatar}`}} 
+                    style={styles.creatorModalAvatar}
+                  />
+                  <Text style={styles.creatorModalName}>{creatorInfo.username}</Text>
+                  <Text style={styles.creatorModalBio}>{creatorInfo.bio || 'Нет информации'}</Text>
+                  
+                  <View style={styles.creatorStats}>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statValue}>{creatorInfo.tracks_count || 0}</Text>
+                      <Text style={styles.statLabel}>Треков</Text>
+                    </View>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statValue}>{creatorInfo.followers_count || 0}</Text>
+                      <Text style={styles.statLabel}>Подписчиков</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
 
+        {/* Просмотр изображений */}
+        <ImageView
+          images={tracks.flatMap(track => 
+            track.images?.map(image => ({ uri: `${baseImageURL}${image.image}` })) || []
+          }
+          imageIndex={currentImageIndex}
+          visible={imageViewerVisible}
+          onRequestClose={() => setImageViewerVisible(false)}
+          animationType="fade"
+        />
+
+        {/* Нижнее меню */}
         <View style={styles.bottomMenu}>
           <TouchableOpacity style={styles.menuButton}>
             <Image source={require('../images/search.png')} style={styles.menuIcon}/>
@@ -197,66 +329,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#D4E9E2',
   },
-  trackCard: {
-    backgroundColor: 'green',
-    height: 200,
-    borderWidth: 2,
-    borderColor: '#000000',
-    marginBottom: 20,
-    borderRadius: 15,
-    padding: 5
-  },
   topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 15,
     paddingTop: 15,
   },
   rightIcons: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     alignItems: 'center',
+  },
+  logoutButton: {
+    padding: 8,
+  },
+  logoutText: {
+    color: '#ff4747',
+    fontSize: 16,
+    fontWeight: '500',
   },
   avatar: {
-    height: 50,
     width: 50,
+    height: 50,
     borderRadius: 25,
-    backgroundColor: 'green',
-    marginLeft: 15,
-    borderColor: '#FFFFFF',
-    borderWidth: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  creatoravatar: {
-    height: 38,
-    width: 38,
-    borderRadius: 25,
-    backgroundColor: 'green',
-    borderColor: '#FFFFFF',
-    borderWidth: 1,
-    marginRight: 4
+    borderWidth: 2,
+    borderColor: 'white',
+    marginLeft: 10,
   },
   favContainer: {
-    height: 50,
     width: 50,
+    height: 50,
     borderRadius: 25,
     backgroundColor: 'white',
-    borderColor: '#FFFFFF',
-    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 15,
+    marginLeft: 10,
+    borderWidth: 2,
+    borderColor: 'white',
   },
   contentWrapper: {
     flex: 1,
     marginHorizontal: 15,
     marginTop: 15,
-    marginBottom: 95, // Отступ для нижнего меню
+    marginBottom: 80,
   },
   scrollContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'white',
     borderRadius: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -267,31 +385,69 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 15,
   },
-  trackItem: {
+  trackCard: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
     padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  creatorAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'white',
+  },
+  creatorName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
   },
   trackTitle: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+    color: '#1B5E20',
+  },
+  trackDescription: {
+    fontSize: 14,
+    color: '#424242',
+    marginTop: 5,
+    lineHeight: 20,
+  },
+  showMoreButton: {
+    marginTop: 5,
+  },
+  showMoreText: {
+    color: '#2E7D32',
+    fontSize: 14,
     fontWeight: '500',
   },
-  logoutButton: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    zIndex: 10,
+  imagesContainer: {
+    marginTop: 10,
   },
-  logoutText: {
-    color: '#ff4747',
-    fontSize: 16,
+  trackImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  endOfList: {
+    textAlign: 'center',
+    color: '#757575',
+    padding: 10,
   },
   bottomMenu: {
     position: 'absolute',
     bottom: 20,
     left: 20,
     right: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'white',
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -310,22 +466,85 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
   },
-  trackSeparator: {
-    backgroundColor: '#000000', 
-    height: 2, 
-    width: '20%', 
-    alignSelf: 'center'
+  // Стили для модального окна создателя
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  CreatorCatd: {
-    backgroundColor: '#FFFFFF',
-    width: '90%',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
+  creatorModalView: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  }
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 15,
+    top: 15,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  creatorModalAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 15,
+    borderWidth: 3,
+    borderColor: '#E8F5E9',
+  },
+  creatorModalName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#1B5E20',
+  },
+  creatorModalBio: {
+    fontSize: 14,
+    color: '#616161',
+    textAlign: 'center',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  creatorStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  statItem: {
+    alignItems: 'center',
+    paddingHorizontal: 15,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#757575',
+  },
 });
