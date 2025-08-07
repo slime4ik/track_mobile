@@ -22,8 +22,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import ImageViewer from 'react-native-image-zoom-viewer';
 import moment from 'moment';
 import 'moment/locale/ru';
+
 moment.locale('ru');
-import { MotiView, AnimatePresence } from 'moti';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -42,8 +42,6 @@ export default function MainScreen({navigation}) {
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [currentImages, setCurrentImages] = useState([]);
   const [likedTracks, setLikedTracks] = useState({});
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchText, setSearchText] = useState('');
   const baseImageURL = BASE_URL.replace('/api', '');
   const pageRef = useRef(1);
   const allLoadedRef = useRef(false);
@@ -115,10 +113,7 @@ export default function MainScreen({navigation}) {
       [trackId]: !prev[trackId]
     }));
   };
-  const toggleSearch = () => {
-    setSearchOpen(prev => !prev);
-    if (searchOpen) setSearchText('');
-  };
+
   // Открытие изображения в полноэкранном режиме
   const openImage = (images, index) => {
     const formattedImages = images.map(img => ({
@@ -408,52 +403,18 @@ export default function MainScreen({navigation}) {
           />
         </Modal>
 
-
         {/* Нижнее меню */}
-    <>
-      <AnimatePresence>
-        {searchOpen && (
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            exit={{ opacity: 0, translateY: 20 }}
-            transition={{ type: 'timing', duration: 300 }}
-            style={styles.searchBarContainer}
-          >
-            <TextInput
-              value={searchText}
-              onChangeText={setSearchText}
-              placeholder="Поиск..."
-              style={styles.searchInput}
-              autoFocus
-            />
-          </MotiView>
-        )}
-      </AnimatePresence>
-
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity style={styles.menuButton} onPress={toggleSearch}>
-          <Image
-            source={
-              searchOpen
-                ? require('../images/close.png') // ← крестик
-                : require('../images/search.png') // ← лупа
-            }
-            style={styles.menuIcon}
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuButton}>
-          <Image source={require('../images/add.png')} style={styles.menuIcon} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuButton}>
-          <Image source={require('../images/home.png')} style={styles.menuIcon} />
-        </TouchableOpacity>
-      </View>
-    </>
-
-
+        <View style={styles.bottomMenu}>
+          <TouchableOpacity style={styles.menuButton}>
+            <Image source={require('../images/search.png')} style={styles.menuIcon}/>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuButton}>
+            <Image source={require('../images/add.png')} style={styles.menuIcon}/>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuButton}>
+            <Image source={require('../images/home.png')} style={styles.menuIcon}/>
+          </TouchableOpacity>
+        </View>
       </View>
       <StatusBar style="auto" />
     </SafeAreaView> 
@@ -668,25 +629,6 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 30,
     height: 30,
-  },
-  searchBarContainer: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 90,
-    backgroundColor: 'white',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: '#000',
   },
   // Стили для модального окна создателя
   centeredView: {
