@@ -18,7 +18,7 @@ import Spinner from 'react-native-loading-spinner-overlay';
 import { AuthContext } from '../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Fontisto from '@expo/vector-icons/Fontisto';
-import ImageView from 'react-native-image-viewing';
+import ImageViewer from 'react-native-image-zoom-viewer';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -35,10 +35,11 @@ export default function MainScreen({navigation}) {
   const [creatorInfo, setCreatorInfo] = useState(null);
   const [expandedDescriptions, setExpandedDescriptions] = useState({});
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [currentImages, setCurrentImages] = useState([]);
   const baseImageURL = BASE_URL.replace('/api', '');
   const pageRef = useRef(1);
   const allLoadedRef = useRef(false);
+  const loadingRef = useRef(false);
 
   // Загрузка профиля пользователя
   const getProfile = async () => {
@@ -71,14 +72,19 @@ export default function MainScreen({navigation}) {
   };
 
   // Открытие изображения в полноэкранном режиме
-  const openImage = (index) => {
-    setCurrentImageIndex(index);
+  const openImage = (images, index) => {
+    const formattedImages = images.map(img => ({
+      url: `${baseImageURL}${img.image}`,
+      props: {}
+    }));
+    setCurrentImages(formattedImages);
     setImageViewerVisible(true);
   };
 
   // Загрузка треков с пагинацией
   const loadTracks = useCallback(async (refresh = false) => {
-    if (isLoadingMore || (allLoadedRef.current && !refresh)) return;
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     
     if (refresh) {
       setRefreshing(true);
@@ -86,6 +92,10 @@ export default function MainScreen({navigation}) {
       allLoadedRef.current = false;
       pageRef.current = 1;
     } else {
+      if (allLoadedRef.current || isLoadingMore) {
+        loadingRef.current = false;
+        return;
+      }
       setIsLoadingMore(true);
     }
 
@@ -114,6 +124,7 @@ export default function MainScreen({navigation}) {
     } catch (e) {
       console.log('Ошибка загрузки треков:', e);
     } finally {
+      loadingRef.current = false;
       if (refresh) {
         setRefreshing(false);
       } else {
@@ -187,7 +198,7 @@ export default function MainScreen({navigation}) {
           data={item.images}
           keyExtractor={(img, index) => `img-${item.id}-${index}`}
           renderItem={({item: image, index}) => (
-            <TouchableOpacity onPress={() => openImage(index)}>
+            <TouchableOpacity onPress={() => openImage(item.images, index)}>
               <Image 
                 source={{ uri: `${baseImageURL}${image.thumbnail || image.image}`}} 
                 style={styles.trackImage}
@@ -237,7 +248,7 @@ export default function MainScreen({navigation}) {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             onEndReached={() => loadTracks()}
-            onEndReachedThreshold={0.1}
+            onEndReachedThreshold={0.5}
             refreshing={refreshing}
             onRefresh={() => loadTracks(true)}
             ListFooterComponent={
@@ -292,16 +303,17 @@ export default function MainScreen({navigation}) {
         </Modal>
 
         {/* Просмотр изображений */}
-        <ImageView
-          images={tracks.flatMap(track => 
-            track.images?.map(image => ({ uri: `${baseImageURL}${image.image}` })) || []
-          )}
-          imageIndex={currentImageIndex}
-          visible={imageViewerVisible}
-          onRequestClose={() => setImageViewerVisible(false)}
-          animationType="fade"
-        />
-
+        <Modal visible={imageViewerVisible} transparent={true}>
+          <ImageViewer 
+            imageUrls={currentImages}
+            index={0}
+            enableSwipeDown
+            onSwipeDown={() => setImageViewerVisible(false)}
+            onClick={() => setImageViewerVisible(false)}
+            enableImageZoom
+            saveToLocalByLongPress={false}
+          />
+        </Modal>
 
         {/* Нижнее меню */}
         <View style={styles.bottomMenu}>
