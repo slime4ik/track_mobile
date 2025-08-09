@@ -38,7 +38,6 @@ export default function TrackDetailScreen() {
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [descriptionLines, setDescriptionLines] = useState(3); // Ограничение по умолчанию
   const [trackAnswers, setTrackAnswers] = useState(null)
-
   const baseImageURL = BASE_URL.replace('/api', '');
 
   const fetchTrack = async () => {
@@ -64,15 +63,31 @@ export default function TrackDetailScreen() {
   };
 
   const getTrackAnswers = async () => {
-    if (!track) return;
     try {
-      const { data } = await api.get(`${BASE_URL}/answers/${trackId}/`)
+      const { data } = await api.get(`/answers/${trackId}/`); // Убрал BASE_URL, т.к. он уже есть в api
       setTrackAnswers(data);
-      console.log(trackAnswers)
+      console.log(data);
     } catch (e) {
-      console.log('Ошибка загрузки ответов', e)
+      console.log('Ошибка загрузки ответов', e);
     }
-  }
+  };
+
+  const AnswerCard = ({item}) => (
+    <View styles={styles.answerCard}>
+      <View>
+        <Image source={{ uri: `${baseImageURL}${item.creator_avatar}`}} style={styles.answerAvatar}/>
+        <Text>{item.creator}</Text>
+
+        {item.solution && (
+          <View>
+            <Text>Ответ</Text>
+          </View>
+        )}
+
+      </View>
+      <Text>{item.comment}</Text>
+    </View>
+  )
 
   const toggleLike = async () => {
     try {
@@ -240,6 +255,14 @@ export default function TrackDetailScreen() {
           enableImageZoom
         />
       </Modal>
+        // Ответы на трек
+          <FlatList
+          data={trackAnswers}
+          renderItem={({item}) => <AnswerCard item={item.id}/>}
+          showsVerticalScrollIndicator={false}
+          onEndReached={getTrackAnswers}
+          keyExtractor={item => `${item.id}`}
+          />
 
       {/* Creator Profile Modal */}
       <Modal
