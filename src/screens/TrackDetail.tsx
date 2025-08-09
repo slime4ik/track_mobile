@@ -29,13 +29,15 @@ export default function TrackDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const { trackId } = route.params;
-
   const [loading, setLoading] = useState(true);
   const [track, setTrack] = useState(null);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [creatorModalVisible, setCreatorModalVisible] = useState(false);
   const [creatorInfo, setCreatorInfo] = useState(null);
+  const [showFullDescription, setShowFullDescription] = useState(false);
+  const [descriptionLines, setDescriptionLines] = useState(3); // Ограничение по умолчанию
+  const [trackAnswers, setTrackAnswers] = useState(null)
 
   const baseImageURL = BASE_URL.replace('/api', '');
 
@@ -61,6 +63,17 @@ export default function TrackDetailScreen() {
     }
   };
 
+  const getTrackAnswers = async () => {
+    if (!track) return;
+    try {
+      const { data } = await api.get(`${BASE_URL}/answers/${trackId}/`)
+      setTrackAnswers(data);
+      console.log(trackAnswers)
+    } catch (e) {
+      console.log('Ошибка загрузки ответов', e)
+    }
+  }
+
   const toggleLike = async () => {
     try {
       setTrack(prev => ({
@@ -80,8 +93,14 @@ export default function TrackDetailScreen() {
     }
   };
 
+  const toggleDescription = () => {
+    setShowFullDescription(!showFullDescription);
+    setDescriptionLines(showFullDescription ? 3 : 0); // 0 означает неограниченное количество строк
+  };
+
   useEffect(() => {
     fetchTrack();
+    getTrackAnswers();
   }, [trackId]);
 
   if (loading) {
@@ -149,7 +168,22 @@ export default function TrackDetailScreen() {
             </View>
           )}
 
-          <Text style={styles.description}>{track.description}</Text>
+          <View>
+            <Text 
+              style={styles.description}
+              numberOfLines={descriptionLines}
+              ellipsizeMode="tail"
+            >
+              {track.description}
+            </Text>
+            {track.description?.length > 200 && (
+              <TouchableOpacity onPress={toggleDescription}>
+                <Text style={styles.showMoreText}>
+                  {showFullDescription ? 'Скрыть' : 'Показать больше...'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Images - using thumbnails first */}
           {track.images?.length > 0 && (
@@ -329,7 +363,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: '#424242',
+    marginBottom: 4,
+  },
+  showMoreText: {
+    color: '#4CAF50',
+    fontSize: 14,
     marginBottom: 16,
+    fontWeight: '500',
   },
   imagesContainer: {
     marginBottom: 16,
