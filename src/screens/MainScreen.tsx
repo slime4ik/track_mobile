@@ -228,9 +228,9 @@ export default function MainScreen({navigation}) {
           </View>
         )}
       </View>
-      
+      <TouchableOpacity onPress={() => navigation.navigate('TrackDetail', {trackId: item.id})}>
       <Text style={styles.trackTitle}>{item.subject}</Text>
-      
+      </TouchableOpacity> 
       {/* Категории */}
       {item.category?.length > 0 && (
         <View style={styles.categoriesContainer}>
@@ -373,17 +373,6 @@ export default function MainScreen({navigation}) {
                   />
                   <Text style={styles.creatorModalName}>{creatorInfo.username}</Text>
                   <Text style={styles.creatorModalBio}>{creatorInfo.bio || 'Нет информации'}</Text>
-                  
-                  <View style={styles.creatorStats}>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statValue}>{creatorInfo.tracks_count || 0}</Text>
-                      <Text style={styles.statLabel}>Треков</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statValue}>{creatorInfo.followers_count || 0}</Text>
-                      <Text style={styles.statLabel}>Подписчиков</Text>
-                    </View>
-                  </View>
                 </>
               )}
             </View>
@@ -523,7 +512,7 @@ const styles = StyleSheet.create({
     color: '#757575',
   },
   solvedBadge: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#4caf50ff',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,

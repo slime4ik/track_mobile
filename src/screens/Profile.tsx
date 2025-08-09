@@ -92,7 +92,7 @@ export default function ProfileScreen({navigation}) {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.navigate('Home')}>
+                <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={40} color="white" />
                 </TouchableOpacity>
             </View>

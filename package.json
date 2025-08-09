@@ -28,6 +28,7 @@
     "react-native-image-viewing": "^0.2.2",
     "react-native-image-zoom-viewer": "^3.0.1",
     "react-native-loading-spinner-overlay": "^3.0.1",
+    "react-native-modal": "^14.0.0-rc.1",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1"
