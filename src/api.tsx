@@ -5,17 +5,21 @@ import { navigationRef } from "./navigationRef";
 
 const api = axios.create({
   baseURL: BASE_URL,
+  headers: {
+    "X-Client-Type": "mobile", // Добавляем заголовок глобально для всех запросов
+  },
 });
 
 // Добавляем токен в каждый запрос
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  config.headers["X-Client-Type"] = "mobile";
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
-// Логика обновления токена
+// Логика обновления токена (остаётся без изменений)
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -33,8 +37,8 @@ api.interceptors.response.use(
 
         const { data } = await axios.post(
           `${BASE_URL}/token/refresh/`,
-          {},
-          { headers: { "X-Client-Type": "mobile", "X-Refresh-Token": refresh } }
+          { refresh },
+          { headers: { "X-Client-Type": "mobile" } } // Убедимся, что заголовок есть
         );
 
         await AsyncStorage.setItem("access_token", data.access);

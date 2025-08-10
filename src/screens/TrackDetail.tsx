@@ -10,7 +10,9 @@ import {
   Modal,
   StyleSheet,
   Dimensions,
-  Pressable
+  Pressable,
+  TextInput,
+  RefreshControl
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,14 +32,18 @@ export default function TrackDetailScreen() {
   const navigation = useNavigation();
   const { trackId } = route.params;
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [track, setTrack] = useState(null);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [creatorModalVisible, setCreatorModalVisible] = useState(false);
   const [creatorInfo, setCreatorInfo] = useState(null);
   const [showFullDescription, setShowFullDescription] = useState(false);
-  const [descriptionLines, setDescriptionLines] = useState(3); // Ограничение по умолчанию
-  const [trackAnswers, setTrackAnswers] = useState(null)
+  const [descriptionLines, setDescriptionLines] = useState(3);
+  const [trackAnswers, setTrackAnswers] = useState([]);
+  const [answerText, setAnswerText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nextPage, setNextPage] = useState(null);
   const baseImageURL = BASE_URL.replace('/api', '');
 
   const fetchTrack = async () => {
@@ -48,13 +54,13 @@ export default function TrackDetailScreen() {
       console.error('Failed to fetch track:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const fetchCreatorInfo = async () => {
-    if (!track) return;
+  const fetchCreatorInfo = async (creatorId) => {
     try {
-      const { data } = await api.get(`/users/${track.creator}/`);
+      const { data } = await api.get(`/users/${creatorId}/`);
       setCreatorInfo(data);
       setCreatorModalVisible(true);
     } catch (error) {
@@ -62,32 +68,73 @@ export default function TrackDetailScreen() {
     }
   };
 
-  const getTrackAnswers = async () => {
+  const getTrackAnswers = async (url = null) => {
     try {
-      const { data } = await api.get(`/answers/${trackId}/`); // Убрал BASE_URL, т.к. он уже есть в api
-      setTrackAnswers(data);
-      console.log(data);
+      const endpoint = url || `/answers/${trackId}/`;
+      const { data } = await api.get(endpoint);
+      
+      if (url) {
+        // Pagination - append new answers
+        setTrackAnswers(prev => [...prev, ...data.results]);
+      } else {
+        // First load
+        setTrackAnswers(data.results || []);
+      }
+      
+      setNextPage(data.next);
     } catch (e) {
       console.log('Ошибка загрузки ответов', e);
+      setTrackAnswers([]);
     }
   };
 
-  const AnswerCard = ({item}) => (
-    <View styles={styles.answerCard}>
-      <View>
-        <Image source={{ uri: `${baseImageURL}${item.creator_avatar}`}} style={styles.answerAvatar}/>
-        <Text>{item.creator}</Text>
+  const markAsSolution = async (answerId) => {
+    try {
+      await api.patch(`/track-answers/${answerId}/`, { solution: true });
+      
+      // Update answers state
+      const updatedAnswers = trackAnswers.map(answer => {
+        if (answer.id === answerId) {
+          return { ...answer, solution: true };
+        }
+        return answer;
+      });
+      setTrackAnswers(updatedAnswers);
+    } catch (error) {
+      console.error('Error marking as solution:', error);
+    }
+  };
 
-        {item.solution && (
-          <View>
-            <Text>Ответ</Text>
-          </View>
-        )}
+  const handleSubmitAnswer = async () => {
+    if (!answerText.trim() || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      const { data } = await api.post(`/answers/${trackId}/`, {
+        comment: answerText
+      });
+      
+      // Add new answer to the beginning of the list
+      setTrackAnswers(prev => [data, ...prev]);
+      setAnswerText('');
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      </View>
-      <Text>{item.comment}</Text>
-    </View>
-  )
+  const loadMoreAnswers = () => {
+    if (nextPage) {
+      getTrackAnswers(nextPage);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTrack();
+    getTrackAnswers();
+  };
 
   const toggleLike = async () => {
     try {
@@ -110,13 +157,54 @@ export default function TrackDetailScreen() {
 
   const toggleDescription = () => {
     setShowFullDescription(!showFullDescription);
-    setDescriptionLines(showFullDescription ? 3 : 0); // 0 означает неограниченное количество строк
+    setDescriptionLines(showFullDescription ? 3 : 0);
   };
 
   useEffect(() => {
     fetchTrack();
     getTrackAnswers();
   }, [trackId]);
+
+  const AnswerCard = ({ item }) => (
+    <View style={styles.answerCard}>
+      <View style={styles.answerHeader}>
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center' }}
+          onPress={() => fetchCreatorInfo(item.creator)}
+        >
+          <Image 
+            source={
+              { uri: `${baseImageURL}${item.creator_avatar}` }}
+            style={styles.answerAvatar}
+          />
+          <Text style={styles.answerCreator}>{item.creator}</Text>
+        </TouchableOpacity>
+        
+        {item.solution && (
+          <View style={styles.solutionBadge}>
+            <Text style={styles.solutionText}>Ответ</Text>
+          </View>
+        )}
+      </View>
+      
+      <Text style={styles.answerComment}>{item.comment}</Text>
+      
+      <View style={styles.answerFooter}>
+        <Text style={styles.answerDate}>
+          {moment(item.created_at, 'DD-MM-YYYY HH:mm').fromNow()}
+        </Text>
+        
+        {item.can_manage && !item.solution && (
+          <TouchableOpacity 
+            style={styles.solutionButton}
+            onPress={() => markAsSolution(item.id)}
+          >
+            <Text style={styles.solutionButtonText}>Пометить как ответ</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -129,7 +217,7 @@ export default function TrackDetailScreen() {
   if (!track) {
     return (
       <View style={styles.container}>
-        <Text>Failed to load track</Text>
+        <Text>Не удалось загрузить трек</Text>
       </View>
     );
   }
@@ -152,16 +240,24 @@ export default function TrackDetailScreen() {
       <ScrollView 
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#4CAF50']}
+          />
+        }
       >
         {/* Compact Track Card */}
         <View style={styles.trackCard}>
           {/* Creator Info */}
           <TouchableOpacity 
             style={styles.creatorContainer}
-            onPress={fetchCreatorInfo}
+            onPress={() => fetchCreatorInfo(track.creator)}
           >
             <Image
-              source={{ uri: `${baseImageURL}${track.creator_avatar}` }}
+              source={
+                { uri: `${baseImageURL}${track.creator_avatar}` }}
               style={styles.creatorAvatar}
             />
             <View>
@@ -200,7 +296,7 @@ export default function TrackDetailScreen() {
             )}
           </View>
 
-          {/* Images - using thumbnails first */}
+          {/* Images */}
           {track.images?.length > 0 && (
             <FlatList
               horizontal
@@ -239,6 +335,55 @@ export default function TrackDetailScreen() {
             </View>
           </View>
         </View>
+
+        {/* Answer Form */}
+        <View style={styles.answerFormContainer}>
+          <Text style={styles.answerFormTitle}>Ваш ответ</Text>
+          <TextInput
+            style={styles.answerInput}
+            multiline
+            placeholder="Напишите ваш ответ..."
+            value={answerText}
+            onChangeText={setAnswerText}
+          />
+          <TouchableOpacity 
+            style={styles.submitButton}
+            onPress={handleSubmitAnswer}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.submitButtonText}>Отправить ответ</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Answers Section */}
+        <View style={styles.answersContainer}>
+          <Text style={styles.answersTitle}>Ответы ({trackAnswers.length})</Text>
+          
+          {trackAnswers.length > 0 ? (
+            <FlatList
+              data={trackAnswers}
+              renderItem={({ item }) => <AnswerCard item={item} />}
+              keyExtractor={item => item.id.toString()}
+              scrollEnabled={false}
+              ListFooterComponent={
+                nextPage ? (
+                  <TouchableOpacity 
+                    style={styles.loadMoreButton}
+                    onPress={loadMoreAnswers}
+                  >
+                    <Text style={styles.loadMoreText}>Показать еще</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
+            />
+          ) : (
+            <Text style={styles.noAnswersText}>Пока нет ответов. Будьте первым!</Text>
+          )}
+        </View>
       </ScrollView>
 
       {/* Image Viewer */}
@@ -255,14 +400,6 @@ export default function TrackDetailScreen() {
           enableImageZoom
         />
       </Modal>
-        // Ответы на трек
-          <FlatList
-          data={trackAnswers}
-          renderItem={({item}) => <AnswerCard item={item.id}/>}
-          showsVerticalScrollIndicator={false}
-          onEndReached={getTrackAnswers}
-          keyExtractor={item => `${item.id}`}
-          />
 
       {/* Creator Profile Modal */}
       <Modal
@@ -283,7 +420,8 @@ export default function TrackDetailScreen() {
             {creatorInfo && (
               <>
                 <Image 
-                  source={{ uri: `${baseImageURL}${creatorInfo.avatar}` }} 
+                  source={
+                    { uri: `${baseImageURL}${creatorInfo.avatar}` }}
                   style={styles.modalAvatar}
                 />
                 <Text style={styles.modalName}>{creatorInfo.username}</Text>
@@ -468,23 +606,135 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 20,
   },
-  creatorStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
+  // Answer styles
+  answerFormContainer: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
     marginBottom: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  viewProfileButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  answerFormTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#1B5E20',
+  },
+  answerInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    marginBottom: 12,
+    textAlignVertical: 'top',
   },
-  viewProfileText: {
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  submitButtonText: {
     color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  answersContainer: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  answersTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#1B5E20',
+  },
+  noAnswersText: {
+    textAlign: 'center',
+    color: '#757575',
+    marginVertical: 16,
+  },
+  answerCard: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  answerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  answerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  answerCreator: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#2E7D32',
+  },
+  solutionBadge: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  solutionText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  answerComment: {
+    fontSize: 14,
+    color: '#424242',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  answerFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  answerDate: {
+    fontSize: 12,
+    color: '#757575',
+  },
+  solutionButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  solutionButtonText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  loadMoreButton: {
+    padding: 10,
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  loadMoreText: {
+    color: '#2E7D32',
+    fontWeight: '500',
   },
 });

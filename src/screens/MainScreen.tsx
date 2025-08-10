@@ -203,6 +203,10 @@ export default function MainScreen({navigation}) {
     navigation.navigate('Profile');
   };
 
+  const handleHomePress = () => {
+    navigation.push('Home')
+  }
+
   const renderTrackItem = ({item}) => (
     <View style={[
       styles.trackCard,
@@ -400,7 +404,7 @@ export default function MainScreen({navigation}) {
           <TouchableOpacity style={styles.menuButton}>
             <Image source={require('../images/add.png')} style={styles.menuIcon}/>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuButton}>
+          <TouchableOpacity style={styles.menuButton} onPress={handleHomePress}>
             <Image source={require('../images/home.png')} style={styles.menuIcon}/>
           </TouchableOpacity>
         </View>
