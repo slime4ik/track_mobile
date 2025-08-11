@@ -13,6 +13,7 @@ import ProfileScreen from "../screens/Profile";
 import TrackDetailScreen from "../screens/TrackDetail";
 
 import { AuthContext } from "../context/AuthContext";
+import CreateScreen from "../screens/TrackCreate";
 
 export const navigationRef = React.createRef();
 
@@ -51,6 +52,7 @@ const Navigation = ({ onLayout }) => {
               name="TrackDetail"
               component={TrackDetailScreen}
             />
+            <Stack.Screen name="CreateTrack" component={CreateScreen} />
           </>
         )}
       </Stack.Navigator>

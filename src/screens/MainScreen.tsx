@@ -9,7 +9,10 @@ import {
   FlatList, 
   Modal, 
   Pressable,
-  Dimensions
+  Dimensions,
+  TextInput,
+  Animated,
+  Easing
 } from 'react-native';
 import api from "../api";
 import { BASE_URL } from '../config';
@@ -42,19 +45,67 @@ export default function MainScreen({navigation}) {
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [currentImages, setCurrentImages] = useState([]);
   const [likedTracks, setLikedTracks] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const baseImageURL = BASE_URL.replace('/api', '');
   const pageRef = useRef(1);
   const allLoadedRef = useRef(false);
   const loadingRef = useRef(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const searchTimeoutRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const searchBarAnim = useRef(new Animated.Value(0)).current;
 
+  // Анимация открытия/закрытия поиска
+  const toggleSearch = () => {
+    if (searchVisible) {
+      Animated.parallel([
+        Animated.timing(searchAnim, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true
+        }),
+        Animated.timing(searchBarAnim, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true
+        })
+      ]).start(() => {
+        setSearchVisible(false);
+        setSearchQuery('');
+        loadTracks(true);
+      });
+    } else {
+      setSearchVisible(true);
+      Animated.parallel([
+        Animated.timing(searchAnim, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true
+        }),
+        Animated.timing(searchBarAnim, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true
+        })
+      ]).start(() => {
+        searchInputRef.current?.focus();
+      });
+    }
+  };
 
-  // Форматирование даты в относительный формат
+  // Форматирование даты
   const formatDate = (dateString) => {
     return moment(dateString, 'DD-MM-YYYY HH:mm').fromNow();
   };
 
-  // Загрузка профиля пользователя
+  // Загрузка профиля
   const getProfile = async () => {
     try {
       const res = await api.get(`${BASE_URL}/me/`);
@@ -69,49 +120,10 @@ export default function MainScreen({navigation}) {
     try {
       const res = await api.get(`${BASE_URL}/users/${username}/`);
       setCreatorInfo(res.data);
-      setCurrentCreator(username);
       setCreatorModalVisible(true);
     } catch (e) {
       console.log('Ошибка получения профиля создателя', e);
     }
-  };
-
-  // // Переключение лайка
-  // const toggleLike = async (trackId) => {
-  //   try {
-  //     const newLikedState = !likedTracks[trackId];
-  //     setLikedTracks(prev => ({...prev, [trackId]: newLikedState}));
-      
-  //     // Обновляем локальное состояние треков
-  //     setTracks(prev => prev.map(track => {
-  //       if (track.id === trackId) {
-  //         return {
-  //           ...track,
-  //           total_likes: newLikedState ? track.total_likes + 1 : track.total_likes - 1
-  //         };
-  //       }
-  //       return track;
-  //     }));
-
-  //     // Отправляем запрос на сервер
-  //     if (newLikedState) {
-  //       await api.post(`${BASE_URL}/tracks/${trackId}/like/`);
-  //     } else {
-  //       await api.post(`${BASE_URL}/tracks/${trackId}/like/`);
-  //     }
-  //   } catch (e) {
-  //     console.log('Ошибка при лайке:', e);
-  //     // Откатываем изменения в случае ошибки
-  //     setLikedTracks(prev => ({...prev, [trackId]: !prev[trackId]}));
-  //   }
-  // };
-
-  // Переключение отображения полного описания
-  const toggleDescription = (trackId) => {
-    setExpandedDescriptions(prev => ({
-      ...prev,
-      [trackId]: !prev[trackId]
-    }));
   };
 
   // Открытие изображения в полноэкранном режиме
@@ -125,7 +137,7 @@ export default function MainScreen({navigation}) {
     setImageViewerVisible(true);
   };
 
-  // Загрузка треков с пагинацией
+  // Загрузка треков
   const loadTracks = useCallback(async (refresh = false) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
@@ -144,23 +156,28 @@ export default function MainScreen({navigation}) {
     }
 
     try {
-      const res = await api.get(`${BASE_URL}/tracks/?page=${pageRef.current}`);
+      let url = `${BASE_URL}/tracks/?page=${pageRef.current}`;
+      if (searchQuery) {
+        url += `&search=${encodeURIComponent(searchQuery)}`;
+        setIsSearching(true);
+      } else {
+        setIsSearching(false);
+      }
+
+      const res = await api.get(url);
       
       if (refresh) {
         setTracks(res.data.results);
       } else {
-        // Фильтрация дубликатов по ID
         const newTracks = res.data.results.filter(
           newTrack => !tracks.some(existingTrack => existingTrack.id === newTrack.id)
         );
         setTracks(prev => [...prev, ...newTracks]);
       }
       
-      // Проверяем, есть ли следующая страница
-      const hasMorePages = !!res.data.next;
-      setHasMore(hasMorePages);
+      setHasMore(!!res.data.next);
       
-      if (!hasMorePages) {
+      if (!res.data.next) {
         allLoadedRef.current = true;
       } else {
         pageRef.current += 1;
@@ -175,9 +192,28 @@ export default function MainScreen({navigation}) {
         setIsLoadingMore(false);
       }
     }
-  }, [tracks, isLoadingMore]);
+  }, [tracks, isLoadingMore, searchQuery]);
 
-  // Инициализация данных
+  // Обработчик поиска
+  const handleSearchChange = (text) => {
+    setSearchQuery(text);
+    
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      loadTracks(true);
+    }, 500);
+  };
+
+  // Сброс поиска
+  const resetSearch = () => {
+    setSearchQuery('');
+    loadTracks(true);
+  };
+
+  // Инициализация
   useEffect(() => {
     const initialize = async () => {
       await getProfile();
@@ -187,26 +223,6 @@ export default function MainScreen({navigation}) {
     initialize();
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
-    } catch (error) {
-      console.log('Ошибка при выходе:', error);
-    }
-  };
-
-  const handleProfilePress = () => {
-    navigation.navigate('Profile');
-  };
-
-  const handleHomePress = () => {
-    navigation.push('Home')
-  }
-
   const renderTrackItem = ({item}) => (
     <View style={[
       styles.trackCard,
@@ -215,14 +231,14 @@ export default function MainScreen({navigation}) {
       <View style={styles.trackHeader}>
         <View style={{flexDirection: 'row', alignItems: 'center'}}>
           <TouchableOpacity onPress={() => loadCreatorInfo(item.creator)}>
-        <Image
-          source={
-            item.creator_avatar
-              ? { uri: `${baseImageURL}${item.creator_avatar}` }
-              : require('../images/default-avatar.png')
-          }
-          style={styles.creatorAvatar}
-        />
+            <Image
+              source={
+                item.creator_avatar
+                  ? { uri: `${baseImageURL}${item.creator_avatar}` }
+                  : require('../images/default-avatar.png')
+              }
+              style={styles.creatorAvatar}
+            />
           </TouchableOpacity>
           <View>
             <Text style={styles.creatorName}>{item.creator}</Text>
@@ -236,10 +252,11 @@ export default function MainScreen({navigation}) {
           </View>
         )}
       </View>
+      
       <TouchableOpacity onPress={() => navigation.navigate('TrackDetail', {trackId: item.id})}>
-      <Text style={styles.trackTitle}>{item.subject}</Text>
-      </TouchableOpacity> 
-      {/* Категории */}
+        <Text style={styles.trackTitle}>{item.subject}</Text>
+      </TouchableOpacity>
+      
       {item.category?.length > 0 && (
         <View style={styles.categoriesContainer}>
           {item.category.map((category, index) => (
@@ -268,7 +285,6 @@ export default function MainScreen({navigation}) {
         </TouchableOpacity>
       )}
       
-      {/* Галерея изображений */}
       {item.images?.length > 0 && (
         <FlatList
           horizontal
@@ -287,11 +303,8 @@ export default function MainScreen({navigation}) {
         />
       )}
       
-      {/* Лайки и просмотры */}
       <View style={styles.statsContainer}>
-        <View
-          style={styles.likeButton}
-        >
+        <View style={styles.likeButton}>
           <Ionicons 
             name={likedTracks[item.id] ? "heart" : "heart-outline"} 
             size={20} 
@@ -319,28 +332,87 @@ export default function MainScreen({navigation}) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={styles.container}>
-        {/* Шапка */}
-        <View style={styles.topBar}>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        {/* Шапка с анимацией */}
+        <Animated.View style={[
+          styles.topBar,
+          {
+            transform: [{
+              translateY: searchBarAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, -60]
+              })
+            }],
+            opacity: searchBarAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 0]
+            })
+          }
+        ]}>
+          <TouchableOpacity style={styles.logoutButton} onPress={() => logout()}>
             <Text style={styles.logoutText}>Выйти</Text>
           </TouchableOpacity>
           <View style={styles.rightIcons}>
-            <TouchableOpacity onPress={handleProfilePress}>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
               <Image
-              source={
-                userInfo?.avatar
-                  ? { uri: userInfo.avatar }
-                  : require('../images/default-avatar.png')
-              }
-              style={styles.avatar}
-            />
-            
+                source={
+                  userInfo?.avatar
+                    ? { uri: userInfo.avatar }
+                    : require('../images/default-avatar.png')
+                }
+                style={styles.avatar}
+              />
             </TouchableOpacity>
             <View style={styles.favContainer}>
               <Fontisto name="favorite" size={24} color="black" />
             </View>
           </View>
-        </View>
+        </Animated.View>
+
+        {/* Поисковая строка с анимацией */}
+        {searchVisible && (
+          <Animated.View style={[
+            styles.searchContainer,
+            {
+              transform: [{
+                translateY: searchAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-60, 0]
+                })
+              }],
+              opacity: searchAnim
+            }
+          ]}>
+            <View style={styles.searchInputContainer}>
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Поиск треков..."
+                placeholderTextColor="#757575"
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                autoFocus={true}
+              />
+              {searchQuery ? (
+                <TouchableOpacity 
+                  style={styles.clearSearchButton} 
+                  onPress={resetSearch}
+                >
+                  <Ionicons name="close-circle" size={22} color="#757575" />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.searchIcon}>
+                  <Ionicons name="search" size={20} color="#757575" />
+                </View>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={styles.cancelSearchButton}
+              onPress={toggleSearch}
+            >
+              <Text style={styles.cancelSearchText}>Отмена</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
         {/* Список треков */}
         <View style={styles.contentWrapper}>
@@ -359,7 +431,11 @@ export default function MainScreen({navigation}) {
               isLoadingMore ? (
                 <ActivityIndicator style={{padding: 10}}/>
               ) : !hasMore ? (
-                <Text style={styles.endOfList}>Все треки загружены</Text>
+                <Text style={styles.endOfList}>
+                  {isSearching && tracks.length === 0 
+                    ? 'Ничего не найдено' 
+                    : 'Все треки загружены'}
+                </Text>
               ) : null
             }
           />
@@ -383,14 +459,14 @@ export default function MainScreen({navigation}) {
               
               {creatorInfo && (
                 <>
-              <Image
-                source={
-                  creatorInfo.avatar
-                    ? { uri: `${baseImageURL}${creatorInfo.avatar}` }
-                    : require('../images/default-avatar.png')
-                }
-                style={styles.creatorModalAvatar}
-              />
+                  <Image
+                    source={
+                      creatorInfo.avatar
+                        ? { uri: `${baseImageURL}${creatorInfo.avatar}` }
+                        : require('../images/default-avatar.png')
+                    }
+                    style={styles.creatorModalAvatar}
+                  />
                   <Text style={styles.creatorModalName}>{creatorInfo.username}</Text>
                   <Text style={styles.creatorModalBio}>{creatorInfo.bio || 'Нет информации'}</Text>
                 </>
@@ -414,19 +490,34 @@ export default function MainScreen({navigation}) {
 
         {/* Нижнее меню */}
         <View style={styles.bottomMenu}>
-          <TouchableOpacity style={styles.menuButton}>
-            <Image source={require('../images/search.png')} style={styles.menuIcon}/>
+          <TouchableOpacity 
+            style={styles.menuButton}
+            onPress={toggleSearch}
+          >
+            <Image 
+              source={require('../images/search.png')} 
+              style={[
+                styles.menuIcon,
+                searchVisible && styles.activeMenuIcon
+              ]}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuButton}>
+          <TouchableOpacity 
+            style={styles.menuButton}
+            onPress={() => navigation.navigate('CreateTrack')}
+          >
             <Image source={require('../images/add.png')} style={styles.menuIcon}/>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuButton} onPress={handleHomePress}>
+          <TouchableOpacity 
+            style={styles.menuButton}
+            onPress={() => navigation.push('Home')}
+          >
             <Image source={require('../images/home.png')} style={styles.menuIcon}/>
           </TouchableOpacity>
         </View>
       </View>
       <StatusBar style="auto" />
-    </SafeAreaView> 
+    </SafeAreaView>
   );
 }
 
@@ -445,6 +536,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     paddingTop: 15,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: '#D4E9E2',
   },
   rightIcons: {
     flexDirection: 'row',
@@ -477,10 +574,58 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'white',
   },
+  searchContainer: {
+    position: 'absolute',
+    top: 15,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D4E9E2',
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    height: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 16,
+    color: '#424242',
+  },
+  clearSearchButton: {
+    padding: 5,
+    marginLeft: 5,
+  },
+  searchIcon: {
+    padding: 5,
+    marginLeft: 5,
+  },
+  cancelSearchButton: {
+    marginLeft: 10,
+    paddingHorizontal: 10,
+  },
+  cancelSearchText: {
+    color: '#2E7D32',
+    fontSize: 16,
+    fontWeight: '500',
+  },
   contentWrapper: {
     flex: 1,
+    marginTop: 80,
     marginHorizontal: 15,
-    marginTop: 15,
     marginBottom: 80,
   },
   scrollContainer: {
@@ -638,8 +783,12 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 30,
     height: 30,
+    opacity: 0.7,
   },
-  // Стили для модального окна создателя
+  activeMenuIcon: {
+    opacity: 1,
+    tintColor: '#2E7D32',
+  },
   centeredView: {
     flex: 1,
     justifyContent: 'center',
@@ -697,27 +846,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 15,
     lineHeight: 20,
-  },
-  creatorStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginTop: 15,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  statItem: {
-    alignItems: 'center',
-    paddingHorizontal: 15,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#757575',
   },
 });
