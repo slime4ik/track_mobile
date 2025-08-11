@@ -215,10 +215,14 @@ export default function MainScreen({navigation}) {
       <View style={styles.trackHeader}>
         <View style={{flexDirection: 'row', alignItems: 'center'}}>
           <TouchableOpacity onPress={() => loadCreatorInfo(item.creator)}>
-            <Image 
-              source={{ uri: `${baseImageURL}${item.creator_avatar}`}} 
-              style={styles.creatorAvatar}
-            />
+        <Image
+          source={
+            item.creator_avatar
+              ? { uri: `${baseImageURL}${item.creator_avatar}` }
+              : require('../images/default-avatar.png')
+          }
+          style={styles.creatorAvatar}
+        />
           </TouchableOpacity>
           <View>
             <Text style={styles.creatorName}>{item.creator}</Text>
@@ -322,7 +326,15 @@ export default function MainScreen({navigation}) {
           </TouchableOpacity>
           <View style={styles.rightIcons}>
             <TouchableOpacity onPress={handleProfilePress}>
-              <Image source={{ uri: userInfo?.avatar }} style={styles.avatar} />
+              <Image
+              source={
+                userInfo?.avatar
+                  ? { uri: userInfo.avatar }
+                  : require('../images/default-avatar.png')
+              }
+              style={styles.avatar}
+            />
+            
             </TouchableOpacity>
             <View style={styles.favContainer}>
               <Fontisto name="favorite" size={24} color="black" />
@@ -371,10 +383,14 @@ export default function MainScreen({navigation}) {
               
               {creatorInfo && (
                 <>
-                  <Image 
-                    source={{ uri: `${baseImageURL}${creatorInfo.avatar}`}} 
-                    style={styles.creatorModalAvatar}
-                  />
+              <Image
+                source={
+                  creatorInfo.avatar
+                    ? { uri: `${baseImageURL}${creatorInfo.avatar}` }
+                    : require('../images/default-avatar.png')
+                }
+                style={styles.creatorModalAvatar}
+              />
                   <Text style={styles.creatorModalName}>{creatorInfo.username}</Text>
                   <Text style={styles.creatorModalBio}>{creatorInfo.bio || 'Нет информации'}</Text>
                 </>

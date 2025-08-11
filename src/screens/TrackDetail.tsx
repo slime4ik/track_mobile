@@ -172,11 +172,11 @@ export default function TrackDetailScreen() {
           style={{ flexDirection: 'row', alignItems: 'center' }}
           onPress={() => fetchCreatorInfo(item.creator)}
         >
-          <Image 
-            source={
-              { uri: `${baseImageURL}${item.creator_avatar}` }}
-            style={styles.answerAvatar}
-          />
+        <Image 
+          source={item.creator_avatar ? { uri: `${baseImageURL}${item.creator_avatar}` } : require('../images/default-avatar.png')}
+          style={styles.answerAvatar}
+          onError={() => console.log("Ошибка загрузки аватара")}
+        />
           <Text style={styles.answerCreator}>{item.creator}</Text>
         </TouchableOpacity>
         
@@ -255,11 +255,11 @@ export default function TrackDetailScreen() {
             style={styles.creatorContainer}
             onPress={() => fetchCreatorInfo(track.creator)}
           >
-            <Image
-              source={
-                { uri: `${baseImageURL}${track.creator_avatar}` }}
-              style={styles.creatorAvatar}
-            />
+        <Image
+          source={track.creator_avatar ? { uri: `${baseImageURL}${track.creator_avatar}` } : require('../images/default-avatar.png')}
+          style={styles.creatorAvatar}
+          onError={() => console.log("Ошибка загрузки аватара")}
+        />
             <View>
               <Text style={styles.creatorName}>{track.creator}</Text>
               <Text style={styles.trackDate}>
@@ -419,11 +419,11 @@ export default function TrackDetailScreen() {
             
             {creatorInfo && (
               <>
-                <Image 
-                  source={
-                    { uri: `${baseImageURL}${creatorInfo.avatar}` }}
-                  style={styles.modalAvatar}
-                />
+              <Image 
+                source={creatorInfo.avatar ? { uri: `${baseImageURL}${creatorInfo.avatar}` } : require('../images/default-avatar.png')}
+                style={styles.modalAvatar}
+                onError={() => console.log("Ошибка загрузки аватара")}
+              />
                 <Text style={styles.modalName}>{creatorInfo.username}</Text>
                 <Text style={styles.modalBio}>{creatorInfo.bio || 'Нет информации'}</Text>
               </>

@@ -104,13 +104,43 @@ export default function ProfileScreen({navigation}) {
                         {isEditing ? (
                             <TouchableOpacity onPress={pickImage}>
                                 {avatar ? (
-                                    <Image source={{ uri: avatar }} style={styles.avatar} />
+                                    <Image
+                                    source={
+                                        avatar
+                                        ? { uri: avatar }
+                                        : userInfo?.avatar
+                                            ? { uri: userInfo.avatar }
+                                            : require('../images/default-avatar.png')
+                                    }
+                                    style={styles.avatar}
+                                    />
+
                                 ) : (
-                                    <Image source={{ uri: userInfo.avatar }} style={styles.avatar} />
+                                    <Image
+                                        source={
+                                            avatar
+                                            ? { uri: avatar }
+                                            : userInfo?.avatar
+                                                ? { uri: userInfo.avatar }
+                                                : require('../images/default-avatar.png')
+                                        }
+                                        style={styles.avatar}
+                                        />
+
                                 )}
                             </TouchableOpacity>
                         ) : (
-                            <Image source={{ uri: userInfo.avatar }} style={styles.avatar} />
+                           <Image
+                            source={
+                                avatar
+                                ? { uri: avatar }
+                                : userInfo?.avatar
+                                    ? { uri: userInfo.avatar }
+                                    : require('../images/default-avatar.png')
+                            }
+                            style={styles.avatar}
+                            />
+
                         )}
                     </View>
 

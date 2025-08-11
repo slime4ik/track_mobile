@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useContext, useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
+import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View, Image, Linking } from 'react-native';
 import { AuthContext } from '../../context/AuthContext'
 
 
@@ -32,7 +32,7 @@ export default function LoginScreen({navigation}) {
               </View>
               <View style={{flexDirection: 'row'}}>
                 <Text style={{fontSize: 12}}>Забыли пароль?</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://wehelpy.ru/password_reset/')}>
                     <Text style={styles.link} > Восстановить аккаунт</Text>
                 </TouchableOpacity>
               </View>
