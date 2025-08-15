@@ -18,10 +18,8 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import ImageViewer from 'react-native-image-zoom-viewer';
 import moment from 'moment';
 import 'moment/locale/ru';
-import * as ImagePicker from 'expo-image-picker';
 import api from '../api';
 import { BASE_URL } from '../config';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,8 +35,6 @@ export default function TrackDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [track, setTrack] = useState(null);
-  const [imageViewerVisible, setImageViewerVisible] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [creatorModalVisible, setCreatorModalVisible] = useState(false);
   const [creatorInfo, setCreatorInfo] = useState(null);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -47,7 +43,6 @@ export default function TrackDetailScreen() {
   const [answerText, setAnswerText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nextPage, setNextPage] = useState(null);
-  const [selectedImages, setSelectedImages] = useState([]);
   const [showAnswerForm, setShowAnswerForm] = useState(false);
   const baseImageURL = BASE_URL.replace('/api', '');
 
@@ -107,26 +102,6 @@ export default function TrackDetailScreen() {
     }
   };
 
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        setSelectedImages(prev => [...prev, ...result.assets]);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-    }
-  };
-
-  const removeImage = (index) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-  };
-
   const handleSubmitAnswer = async () => {
     if (!answerText.trim() || isSubmitting) return;
     
@@ -137,14 +112,6 @@ export default function TrackDetailScreen() {
       formData.append('comment', answerText);
       formData.append('solution', false);
       
-      selectedImages.forEach((image, index) => {
-        formData.append('images', {
-          uri: image.uri,
-          name: `image_${index}.jpg`,
-          type: 'image/jpeg',
-        });
-      });
-
       const { data } = await api.post(`/answers/${trackId}/`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -153,7 +120,6 @@ export default function TrackDetailScreen() {
       
       setTrackAnswers(prev => [data, ...prev]);
       setAnswerText('');
-      setSelectedImages([]);
       setShowAnswerForm(false);
     } catch (error) {
       console.error('Error submitting answer:', error);
@@ -226,27 +192,6 @@ export default function TrackDetailScreen() {
       </View>
       
       <Text style={styles.answerComment}>{item.comment}</Text>
-      
-      {item.images_out?.length > 0 && (
-        <FlatList
-          horizontal
-          data={item.images_out}
-          keyExtractor={(_, i) => `answer-img-${i}`}
-          renderItem={({ item: img }) => (
-            <TouchableOpacity onPress={() => {
-              setCurrentImageIndex(0);
-              setImageViewerVisible(true);
-            }}>
-              <Image
-                source={{ uri: `${baseImageURL}${img.thumbnail || img.image}` }}
-                style={styles.answerImage}
-              />
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.answerImagesContainer}
-          showsHorizontalScrollIndicator={false}
-        />
-      )}
       
       <View style={styles.answerFooter}>
         <Text style={styles.answerDate}>
@@ -360,28 +305,6 @@ export default function TrackDetailScreen() {
               )}
             </View>
 
-            {/* Images */}
-            {track.images?.length > 0 && (
-              <FlatList
-                horizontal
-                data={track.images}
-                keyExtractor={(_, i) => `img-${i}`}
-                renderItem={({ item, index }) => (
-                  <TouchableOpacity onPress={() => {
-                    setCurrentImageIndex(index);
-                    setImageViewerVisible(true);
-                  }}>
-                    <Image
-                      source={{ uri: `${baseImageURL}${item.thumbnail || item.image}` }}
-                      style={styles.image}
-                    />
-                  </TouchableOpacity>
-                )}
-                contentContainerStyle={styles.imagesContainer}
-                showsHorizontalScrollIndicator={false}
-              />
-            )}
-
             {/* Stats */}
             <View style={styles.stats}>
               <TouchableOpacity style={styles.statItem} onPress={toggleLike}>
@@ -451,41 +374,7 @@ export default function TrackDetailScreen() {
               onChangeText={setAnswerText}
             />
             
-            {/* Selected Images Preview */}
-            {selectedImages.length > 0 && (
-              <View style={styles.selectedImagesContainer}>
-                <FlatList
-                  horizontal
-                  data={selectedImages}
-                  keyExtractor={(_, index) => `selected-${index}`}
-                  renderItem={({ item, index }) => (
-                    <View style={styles.imagePreviewContainer}>
-                      <Image
-                        source={{ uri: item.uri }}
-                        style={styles.imagePreview}
-                      />
-                      <TouchableOpacity 
-                        style={styles.removeImageButton}
-                        onPress={() => removeImage(index)}
-                      >
-                        <Ionicons name="close" size={16} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  contentContainerStyle={styles.selectedImagesList}
-                />
-              </View>
-            )}
-            
             <View style={styles.formButtonsContainer}>
-              <TouchableOpacity 
-                style={styles.addImageButton}
-                onPress={pickImage}
-              >
-                <Ionicons name="image-outline" size={20} color="#4CAF50" />
-                <Text style={styles.addImageText}>Добавить изображение</Text>
-              </TouchableOpacity>
-              
               <TouchableOpacity 
                 style={styles.submitButton}
                 onPress={handleSubmitAnswer}
@@ -501,21 +390,6 @@ export default function TrackDetailScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
-
-      {/* Image Viewer */}
-      <Modal visible={imageViewerVisible} transparent={true}>
-        <ImageViewer
-          imageUrls={track.images?.map(img => ({
-            url: `${baseImageURL}${img.image}`,
-            props: {}
-          }))}
-          index={currentImageIndex}
-          enableSwipeDown
-          onSwipeDown={() => setImageViewerVisible(false)}
-          onClick={() => setImageViewerVisible(false)}
-          enableImageZoom
-        />
-      </Modal>
 
       {/* Creator Profile Modal */}
       <Modal
@@ -648,15 +522,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontWeight: '500',
   },
-  imagesContainer: {
-    marginBottom: 16,
-  },
-  image: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-    marginRight: 10,
-  },
   stats: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -746,59 +611,20 @@ const styles = StyleSheet.create({
   },
   formButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-  },
-  addImageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-  },
-  addImageText: {
-    marginLeft: 8,
-    color: '#4CAF50',
   },
   submitButton: {
     backgroundColor: '#4CAF50',
     borderRadius: 8,
     padding: 12,
-    flex: 1,
-    marginLeft: 10,
     alignItems: 'center',
+    minWidth: 150,
   },
   submitButtonText: {
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
-  },
-  selectedImagesContainer: {
-    marginBottom: 12,
-  },
-  selectedImagesList: {
-    paddingVertical: 5,
-  },
-  imagePreviewContainer: {
-    position: 'relative',
-    marginRight: 10,
-  },
-  imagePreview: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   answersContainer: {
     backgroundColor: 'white',
@@ -870,15 +696,6 @@ const styles = StyleSheet.create({
     color: '#424242',
     marginBottom: 8,
     lineHeight: 20,
-  },
-  answerImagesContainer: {
-    marginBottom: 8,
-  },
-  answerImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    marginRight: 10,
   },
   answerFooter: {
     flexDirection: 'row',
