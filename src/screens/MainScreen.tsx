@@ -348,9 +348,7 @@ export default function MainScreen({navigation}) {
             })
           }
         ]}>
-          <TouchableOpacity style={styles.logoutButton} onPress={() => logout()}>
-            <Text style={styles.logoutText}>Выйти</Text>
-          </TouchableOpacity>
+
           <View style={styles.rightIcons}>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
               <Image

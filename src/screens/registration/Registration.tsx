@@ -1,44 +1,74 @@
-import { StatusBar } from 'expo-status-bar';
-import { useContext, useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
-import { AuthContext } from '../../context/AuthContext'
+// RegisterScreen.tsx
+import { useContext, useState, useEffect } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, Image, Alert } from 'react-native';
+import { AuthContext } from '../../context/AuthContext';
 import Spinner from 'react-native-loading-spinner-overlay';
-import Ionicons from '@expo/vector-icons/Ionicons';
-
 
 export default function RegisterScreen({navigation}) {
-    const [ username, setUsername ] = useState(null);
-    const [ email, setEmail ] = useState(null);
-    const [regstep, setRegtep] = useState(null);
-    const {isLoading, register} = useContext(AuthContext);
+    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
+    const {isLoading, register, error, clearError} = useContext(AuthContext);
   
-  return (
-    <View style={styles.container}>
-      <Spinner visible={isLoading}/>
-        <View style={styles.wrapper}>
-        <Image source={require('../../images/logo-removebg-preview.png')} style={styles.logo}/>
-            <TextInput placeholder='Почта' style={styles.input} value={email} onChangeText={text => setEmail(text)}/>
-            <TextInput placeholder='Придумайте ник' secureTextEntry style={styles.input} value={username} onChangeText={text => setUsername(text)}/>
-                <View style={{backgroundColor: '#00754A', height: '13%', justifyContent: 'center', marginHorizontal: '11%', borderRadius: 30, marginTop: 15}}>
-                            <TouchableOpacity onPress={() => {
-                register(email, username, navigation);
-            }}>
-                <Text style={{alignSelf: 'center', borderRadius: 20, color: '#FFFFFF' }}>Зарегистрироваться</Text>
-                             </TouchableOpacity>
-              </View>
+    // Обработчик ошибок
+    useEffect(() => {
+      if (error?.type === 'register') {
+        Alert.alert(
+          'Ошибка регистрации',
+          error.message || 'Не удалось зарегистрироваться',
+          [{ text: 'OK', onPress: () => clearError() }]
+        );
+      }
+    }, [error]);
 
-            <View style={{flexDirection: 'column', marginTop: 15}}>
-              <View style={{flexDirection: 'row', alignSelf: 'center'}}>
-                <Text style={{fontSize: 12}}>Есть аккаунт? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                    <Text style={styles.link}>Войти</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
- 
+    const handleRegister = async () => {
+      try {
+        if (!email || !username) {
+          throw new Error('Заполните все поля');
+        }
+        await register(email, username, navigation);
+      } catch (err) {
+        // Ошибка уже обработана в контексте
+      }
+    };
+
+    return (
+      <View style={styles.container}>
+        <Spinner visible={isLoading}/>
+        <View style={styles.wrapper}>
+          <Image source={require('../../images/logo-removebg-preview.png')} style={styles.logo}/>
+          
+          <TextInput 
+            placeholder='Почта' 
+            style={styles.input} 
+            value={email} 
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          
+          <TextInput 
+            placeholder='Придумайте ник' 
+            style={styles.input} 
+            value={username} 
+            onChangeText={setUsername}
+            autoCapitalize="none"
+          />
+          
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity onPress={handleRegister}>
+              <Text style={styles.buttonText}>Зарегистрироваться</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Есть аккаунт? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.footerLink}>Войти</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-    </View>
-  );
+      </View>
+    );
 };
 
 const styles = StyleSheet.create({
@@ -52,7 +82,7 @@ const styles = StyleSheet.create({
     width: '90%',
     backgroundColor: '#FFFFFF',
     borderRadius: 30,
-    height: '45%',
+    paddingVertical: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
@@ -63,32 +93,39 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 12,
     borderRadius: 30,
-    paddingHorizontal: 15,
+    padding: 15,
     marginHorizontal: '11%',
     backgroundColor: '#D4E9E2',
     textAlign: 'center'
-  },
-  link: {
-    color: 'blue',
-    fontSize: 12
   },
   logo: {
     width: 150,
     height: 67,
     alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: 30
+    marginBottom: 30
   },
-  back: {
-    alignSelf: 'center',
+  buttonContainer: {
+    backgroundColor: '#00754A', 
+    height: 50, 
+    justifyContent: 'center', 
+    marginHorizontal: '11%', 
+    borderRadius: 30, 
+    marginTop: 15
   },
-  backContainer: {
-    alignSelf: 'flex-start',
-    borderRadius: 30,
-    borderWidth: 3,
-    marginHorizontal: 20,
-    justifyContent: 'flex-end',
-    backgroundColor: '#00754A',
-    borderColor: '#ffffff'
+  buttonText: {
+    alignSelf: 'center', 
+    color: '#FFFFFF'
+  },
+  footer: {
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    marginTop: 15
+  },
+  footerText: {
+    fontSize: 12
+  },
+  footerLink: {
+    color: 'blue',
+    fontSize: 12
   }
 });

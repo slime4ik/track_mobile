@@ -1,46 +1,82 @@
-import { StatusBar } from 'expo-status-bar';
-import { useContext, useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View, Image, Linking } from 'react-native';
-import { AuthContext } from '../../context/AuthContext'
-
+// LoginScreen.tsx
+import { useContext, useState, useEffect } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, Image, Linking, Alert } from 'react-native';
+import { AuthContext } from '../../context/AuthContext';
+import Spinner from 'react-native-loading-spinner-overlay';
 
 export default function LoginScreen({navigation}) {
-    const [ username, setUsername ] = useState(null);
-    const [ password, setPassword ] = useState(null);
-    const {login} = useContext(AuthContext)
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const {login, error, clearError, isLoading} = useContext(AuthContext);
 
+    // Обработчик ошибок
+    useEffect(() => {
+      if (error?.type === 'login') {
+        Alert.alert(
+          'Ошибка входа',
+          error.message || 'Неверные учетные данные',
+          [{ text: 'OK', onPress: () => clearError() }]
+        );
+      }
+    }, [error]);
 
-  return (
-    <View style={styles.container}>
+    const handleLogin = async () => {
+      try {
+        if (!username || !password) {
+          throw new Error('Заполните все поля');
+        }
+        await login(username, password, navigation);
+      } catch (err) {
+        // Ошибка уже обработана в контексте
+      }
+    };
+
+    return (
+      <View style={styles.container}>
+        <Spinner visible={isLoading}/>
         <View style={styles.wrapper}>
-            <Image source={require('../../images/logo-removebg-preview.png',)} style={styles.logo}/>
-            <TextInput placeholder='Логин' style={styles.input} value={username} onChangeText={text => setUsername(text)}/>
-            <TextInput placeholder='Пароль' secureTextEntry style={styles.input} value={password} onChangeText={text => setPassword(text)}/>
-              <View style={{backgroundColor: '#00754A', height: '13%', justifyContent: 'center', marginHorizontal: '11%', borderRadius: 30, marginTop: 15}}>
-                            <TouchableOpacity onPress={() => {
-                login(username, password, navigation);
-            }}>
-                <Text style={{alignSelf: 'center', borderRadius: 20, color: '#FFFFFF' }}>Войти</Text>
-                             </TouchableOpacity>
-              </View>
-            <View style={{flexDirection: 'column', marginTop: 15, alignSelf: 'center',}}>
-              <View style={{flexDirection: 'row'}}>
-                <Text style={{fontSize: 12}}>Нет аккаунта? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                    <Text style={styles.link}> Зарегистрировать аккаунт</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{flexDirection: 'row'}}>
-                <Text style={{fontSize: 12}}>Забыли пароль?</Text>
-                <TouchableOpacity onPress={() => Linking.openURL('https://wehelpy.ru/password_reset/')}>
-                    <Text style={styles.link} > Восстановить аккаунт</Text>
-                </TouchableOpacity>
-              </View>
+          <Image source={require('../../images/logo-removebg-preview.png')} style={styles.logo}/>
+          
+          <TextInput 
+            placeholder='Логин' 
+            style={styles.input} 
+            value={username} 
+            onChangeText={setUsername}
+            autoCapitalize="none"
+          />
+          
+          <TextInput 
+            placeholder='Пароль' 
+            secureTextEntry 
+            style={styles.input} 
+            value={password} 
+            onChangeText={setPassword}
+          />
+          
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity onPress={handleLogin}>
+              <Text style={styles.buttonText}>Войти</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Нет аккаунта? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={styles.footerLink}>Зарегистрировать аккаунт</Text>
+              </TouchableOpacity>
             </View>
- 
+            
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Забыли пароль? </Text>
+              <TouchableOpacity onPress={() => Linking.openURL('https://wehelpy.ru/password_reset/')}>
+                <Text style={styles.footerLink}>Восстановить аккаунт</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-    </View>
-  );
+      </View>
+    );
 }
 
 const styles = StyleSheet.create({
@@ -54,7 +90,7 @@ const styles = StyleSheet.create({
     width: '90%',
     backgroundColor: '#FFFFFF',
     borderRadius: 30,
-    height: '45%',
+    paddingVertical: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
@@ -64,20 +100,42 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 12,
     borderRadius: 30,
-    paddingHorizontal: 15,
+    padding: 15,
     marginHorizontal: '11%',
     backgroundColor: '#D4E9E2',
     textAlign: 'center'
-  },
-  link: {
-    color: 'blue',
-    fontSize: 12
   },
   logo: {
     width: 150,
     height: 67,
     alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: 30
+    marginBottom: 30
+  },
+  buttonContainer: {
+    backgroundColor: '#00754A', 
+    height: 50, 
+    justifyContent: 'center', 
+    marginHorizontal: '11%', 
+    borderRadius: 30, 
+    marginTop: 15
+  },
+  buttonText: {
+    alignSelf: 'center', 
+    color: '#FFFFFF'
+  },
+  footer: {
+    marginTop: 15,
+    alignItems: 'center'
+  },
+  footerRow: {
+    flexDirection: 'row',
+    marginBottom: 5
+  },
+  footerText: {
+    fontSize: 12
+  },
+  footerLink: {
+    color: 'blue',
+    fontSize: 12
   }
 });

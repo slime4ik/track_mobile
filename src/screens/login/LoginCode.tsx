@@ -1,80 +1,92 @@
-import { StatusBar } from 'expo-status-bar';
-import { useContext, useState, useRef } from 'react';
-import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
-import { AuthContext } from '../../context/AuthContext'
+// LoginCodeScreen.tsx
+import { useContext, useState, useRef, useEffect } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, Image, Alert } from 'react-native';
+import { AuthContext } from '../../context/AuthContext';
 import Spinner from 'react-native-loading-spinner-overlay';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-
 export default function LoginCodeScreen({navigation}) {
-    const {isLoading, loginCode} = useContext(AuthContext);
+    const {isLoading, loginCode, error, clearError} = useContext(AuthContext);
     const [code, setCode] = useState(['', '', '', '', '', '']);
-    const inputs = useRef<(TextInput | null)[]>([]);
+    const inputs = useRef([]);
 
-  const handleChange = (text: string, index: number) => {
-    if (!/^\d*$/.test(text)) return; // Только цифры
+    // Обработчик ошибок
+    useEffect(() => {
+      if (error?.type === 'loginCode') {
+        Alert.alert(
+          'Ошибка входа',
+          error.message || 'Неверный код подтверждения',
+          [{ text: 'OK', onPress: () => clearError() }]
+        );
+      }
+    }, [error]);
 
-    const newCode = [...code];
-    newCode[index] = text;
-    setCode(newCode);
+    const handleChange = (text, index) => {
+      if (!/^\d*$/.test(text)) return;
 
-    // Переход к следующему
-    if (text && index < 5) {
-      inputs.current[index + 1]?.focus();
-    }
+      const newCode = [...code];
+      newCode[index] = text;
+      setCode(newCode);
 
-    // Автосабмит
-    if (index === 5 && text) {
-      const fullCode = newCode.join('');
-      console.log('Введён код:', fullCode);
-    }
-  };
+      if (text && index < 5) {
+        inputs.current[index + 1]?.focus();
+      }
+    };
 
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && code[index] === '' && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
-  };
-  return (
-    <View style={styles.container}>
-      <Spinner visible={isLoading}/>
+    const handleKeyPress = (e, index) => {
+      if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
+        inputs.current[index - 1]?.focus();
+      }
+    };
+
+    const handleSubmit = async () => {
+      const fullCode = code.join('');
+      if (fullCode.length !== 6) {
+        Alert.alert('Ошибка', 'Введите полный код из 6 цифр');
+        return;
+      }
+      
+      try {
+        await loginCode(fullCode);
+      } catch (err) {
+        // Ошибка уже обработана в контексте
+      }
+    };
+
+    return (
+      <View style={styles.container}>
+        <Spinner visible={isLoading}/>
         <View style={styles.wrapper}>
-        <View style={{justifyContent: 'flex-start', marginBottom: 45}}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <View style={styles.backContainer}>
-            <Ionicons name="arrow-back" size={30} color="white" style={styles.back}/>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backContainer}>
+            <Ionicons name="arrow-back" size={30} color="white" />
+          </TouchableOpacity>
+
+          <Image source={require('../../images/logo-removebg-preview.png')} style={styles.logo} />
+
+          <Text style={styles.title}>Введите код из письма</Text>
+
+          <View style={styles.codeContainer}>
+            {code.map((digit, index) => (
+              <TextInput
+                key={index}
+                ref={el => (inputs.current[index] = el)}
+                value={digit}
+                onChangeText={text => handleChange(text, index)}
+                onKeyPress={e => handleKeyPress(e, index)}
+                style={styles.input}
+                keyboardType="number-pad"
+                maxLength={1}
+                textAlign="center"
+              />
+            ))}
           </View>
-        </TouchableOpacity>
-        <Image source={require('../../images/logo-removebg-preview.png')} style={styles.logo}/>
+
+          <TouchableOpacity style={styles.button} onPress={handleSubmit}>
+            <Text style={styles.buttonText}>Подтвердить</Text>
+          </TouchableOpacity>
         </View>
-      <View style={styles.codeContainer}>
-        {code.map((digit, index) => (
-          <TextInput
-            key={index}
-            ref={el => (inputs.current[index] = el)}
-            value={digit}
-            onChangeText={text => handleChange(text, index)}
-            onKeyPress={e => handleKeyPress(e, index)}
-            style={styles.input}
-            keyboardType="number-pad"
-            maxLength={1}
-            returnKeyType="done"
-            textAlign="center"
-          />
-        ))}
       </View>
-              <View style={{backgroundColor: '#00754A', height: '15%', justifyContent: 'center', marginHorizontal: '11%', borderRadius: 30, marginTop: 15, width: '70%', alignSelf: 'center'}}>
-              <TouchableOpacity onPress={() => {
-                const fullCode = code.join('');
-                loginCode(fullCode);
-              }}>
-                <Text style={{alignSelf: 'center', borderRadius: 20, color: '#FFFFFF',}}>Войти</Text>
-                             </TouchableOpacity>
-              </View>
- 
-        </View>
-    </View>
-  );
+    );
 };
 
 const styles = StyleSheet.create({
@@ -88,18 +100,18 @@ const styles = StyleSheet.create({
     width: '90%',
     backgroundColor: '#FFFFFF',
     borderRadius: 30,
-    height: '35%',
+    paddingVertical: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
-    justifyContent: 'center'
   },
   title: {
-    fontSize: 20,
+    fontSize: 16,
     marginBottom: 20,
     color: '#333',
+    textAlign: 'center'
   },
   input: {
     width: 45,
@@ -109,36 +121,42 @@ const styles = StyleSheet.create({
     borderColor: '#ccc',
     fontSize: 24,
     color: '#333',
-    backgroundColor: '#fff',
-    marginBottom: 20
+    backgroundColor: '#fff'
   },
   codeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
-    marginHorizontal: 15
-  },
-  link: {
-    color: 'blue'
+    marginHorizontal: 20,
+    marginBottom: 30
   },
   logo: {
     width: 150,
     height: 67,
-    marginBottom: 30,
     alignSelf: 'center',
-    position: 'absolute'
-  },
-  back: {
-    alignSelf: 'center',
+    marginBottom: 20
   },
   backContainer: {
-    alignSelf: 'baseline',
-    borderRadius: 30,
-    borderWidth: 7,
-    marginHorizontal: 20,
-    justifyContent: 'flex-end',
+    alignSelf: 'flex-start',
+    borderRadius: 25,
+    borderWidth: 3,
     backgroundColor: '#00754A',
-    borderColor: '#00754A',
-    marginTop: 10
+    borderColor: '#fff',
+    padding: 5,
+    marginLeft: 20,
+    marginBottom: 15
   },
+  button: {
+    backgroundColor: '#00754A',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    width: '65%',
+    alignItems: 'center',
+    alignSelf: 'center'
+  },
+  buttonText: { 
+    color: '#fff', 
+    fontSize: 15, 
+    fontWeight: '600' 
+  }
 });
